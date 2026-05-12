@@ -1,0 +1,777 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>待办清单 + 番茄钟</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #f5f6fa;
+    --card: #ffffff;
+    --primary: #4f6ef7;
+    --primary-light: #eef1ff;
+    --danger: #f75f5f;
+    --success: #2ed573;
+    --text: #2d3436;
+    --text-secondary: #636e72;
+    --border: #e8e8ec;
+    --radius: 12px;
+    --shadow: 0 2px 12px rgba(0,0,0,0.06);
+  }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+  }
+  .app {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 28px;
+    max-width: 820px;
+    width: 100%;
+  }
+  .card {
+    background: var(--card);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: 28px;
+  }
+  .card-title {
+    font-size: 18px;
+    font-weight: 600;
+    margin-bottom: 20px;
+    color: var(--text);
+  }
+
+  /* ===== Todo ===== */
+  .todo-input-row {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 16px;
+  }
+  .todo-input-row input {
+    flex: 1;
+    padding: 10px 14px;
+    border: 1.5px solid var(--border);
+    border-radius: 8px;
+    font-size: 14px;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  .todo-input-row input:focus {
+    border-color: var(--primary);
+  }
+  .todo-input-row button {
+    padding: 10px 18px;
+    border: none;
+    border-radius: 8px;
+    background: var(--primary);
+    color: #fff;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: opacity 0.2s;
+    white-space: nowrap;
+  }
+  .todo-input-row button:hover { opacity: 0.85; }
+
+  .todo-filters {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 14px;
+  }
+  .todo-filters button {
+    padding: 4px 12px;
+    border: 1.5px solid var(--border);
+    border-radius: 6px;
+    background: transparent;
+    font-size: 13px;
+    cursor: pointer;
+    color: var(--text-secondary);
+    transition: all 0.2s;
+  }
+  .todo-filters button.active {
+    background: var(--primary-light);
+    border-color: var(--primary);
+    color: var(--primary);
+    font-weight: 500;
+  }
+
+  .todo-list { list-style: none; }
+  .todo-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border);
+    transition: opacity 0.2s;
+  }
+  .todo-item:last-child { border-bottom: none; }
+  .todo-item.completed .todo-text {
+    text-decoration: line-through;
+    color: var(--text-secondary);
+  }
+  .todo-item.hidden { display: none; }
+
+  .todo-check {
+    width: 20px; height: 20px; border-radius: 50%;
+    border: 2px solid var(--border);
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+    transition: all 0.2s;
+  }
+  .todo-check:hover { border-color: var(--success); }
+  .todo-check.checked {
+    background: var(--success);
+    border-color: var(--success);
+  }
+  .todo-check.checked::after {
+    content: "✓";
+    color: #fff;
+    font-size: 12px;
+    font-weight: 700;
+  }
+
+  .todo-text {
+    flex: 1;
+    font-size: 14px;
+    line-height: 1.4;
+  }
+  .todo-delete {
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+    font-size: 16px;
+    padding: 2px 4px;
+    opacity: 0;
+    transition: all 0.2s;
+    border-radius: 4px;
+  }
+  .todo-item:hover .todo-delete { opacity: 1; }
+  .todo-delete:hover { color: var(--danger); background: #fff0f0; }
+
+  .todo-stats {
+    margin-top: 12px;
+    font-size: 13px;
+    color: var(--text-secondary);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .todo-stats .clear-done {
+    border: none;
+    background: none;
+    color: var(--danger);
+    font-size: 13px;
+    cursor: pointer;
+    padding: 2px 6px;
+    border-radius: 4px;
+  }
+  .todo-stats .clear-done:hover { background: #fff0f0; }
+
+  .empty-msg {
+    text-align: center;
+    color: var(--text-secondary);
+    font-size: 14px;
+    padding: 32px 0 16px;
+  }
+
+  /* ===== Pomodoro ===== */
+  .timer-display {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 8px 0 16px;
+  }
+  .timer-ring {
+    position: relative;
+    width: 200px; height: 200px;
+    margin-bottom: 16px;
+  }
+  .timer-ring svg {
+    transform: rotate(-90deg);
+    width: 100%; height: 100%;
+  }
+  .timer-ring .bg-circle {
+    fill: none;
+    stroke: var(--border);
+    stroke-width: 6;
+  }
+  .timer-ring .progress-circle {
+    fill: none;
+    stroke: var(--primary);
+    stroke-width: 6;
+    stroke-linecap: round;
+    stroke-dasharray: 565.48;
+    stroke-dashoffset: 0;
+    transition: stroke-dashoffset 0.3s, stroke 0.3s;
+  }
+  .timer-ring .progress-circle.running { stroke: var(--primary); }
+  .timer-ring .progress-circle.paused { stroke: #fdcb6e; }
+  .timer-ring .progress-circle.ended { stroke: var(--success); }
+
+  .timer-text {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+  }
+  .timer-text .time {
+    font-size: 42px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 2px;
+  }
+  .timer-text .label {
+    font-size: 13px;
+    color: var(--text-secondary);
+    margin-top: 4px;
+  }
+
+  .timer-controls {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+  }
+  .timer-controls button {
+    padding: 8px 24px;
+    border: none;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: opacity 0.2s;
+  }
+  .timer-controls button:hover { opacity: 0.85; }
+  .timer-controls .btn-start {
+    background: var(--primary);
+    color: #fff;
+    min-width: 100px;
+  }
+  .timer-controls .btn-start.reset { background: var(--text-secondary); }
+  .timer-controls .btn-pause {
+    background: #ffeaa7;
+    color: #2d3436;
+  }
+  .timer-controls .btn-restart {
+    background: var(--border);
+    color: var(--text);
+    padding: 8px 14px;
+  }
+
+  .timer-sessions {
+    text-align: center;
+    margin-top: 16px;
+    font-size: 13px;
+    color: var(--text-secondary);
+  }
+
+  /* ===== Toast ===== */
+  .toast {
+    position: fixed;
+    bottom: 32px;
+    left: 50%;
+    transform: translateX(-50%) translateY(80px);
+    background: #2d3436;
+    color: #fff;
+    padding: 12px 28px;
+    border-radius: 8px;
+    font-size: 14px;
+    opacity: 0;
+    transition: all 0.35s ease;
+    pointer-events: none;
+    z-index: 100;
+  }
+  .toast.show {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+
+  /* ===== Responsive ===== */
+  @media (max-width: 640px) {
+    body { padding: 16px; align-items: flex-start; }
+    .app { grid-template-columns: 1fr; gap: 20px; }
+    .card { padding: 20px; }
+    .timer-ring { width: 170px; height: 170px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="app">
+  <!-- Todo Card -->
+  <div class="card">
+    <h2 class="card-title">✅ 待办清单</h2>
+    <div class="todo-input-row">
+      <input id="todoInput" type="text" placeholder="输入待办事项..." maxlength="200" autofocus>
+      <button id="addBtn">添加</button>
+    </div>
+    <div class="todo-filters">
+      <button data-filter="all" class="active">全部</button>
+      <button data-filter="active">待办</button>
+      <button data-filter="completed">已完成</button>
+    </div>
+    <ul id="todoList" class="todo-list"></ul>
+    <div class="todo-stats">
+      <span id="todoStats">0 项待办</span>
+      <button id="clearDone" class="clear-done">清除已完成</button>
+    </div>
+  </div>
+
+  <!-- Pomodoro Card -->
+  <div class="card">
+    <h2 class="card-title">🍅 番茄钟</h2>
+    <div class="timer-display">
+      <div class="timer-ring">
+        <svg viewBox="0 0 190 190">
+          <circle class="bg-circle" cx="95" cy="95" r="90"/>
+          <circle id="progressCircle" class="progress-circle" cx="95" cy="95" r="90"/>
+        </svg>
+        <div class="timer-text">
+          <span class="time" id="timerDisplay">25:00</span>
+          <span class="label" id="timerLabel">专注</span>
+        </div>
+      </div>
+      <div class="timer-controls">
+        <button class="btn-start" id="startBtn">开始</button>
+        <button class="btn-restart" id="resetBtn">⟳</button>
+      </div>
+      <div class="timer-sessions">
+        今日完成 <span id="sessionCount">0</span> 个番茄
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+(function() {
+  // ================================
+  //  Todo
+  // ================================
+  const STORAGE_KEY = 'todo_pomodoro_data';
+
+  function loadData() {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (raw) return JSON.parse(raw);
+    } catch (_) { /* ignore */ }
+    return null;
+  }
+
+  function saveData(data) {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  }
+
+  // --- todo state ---
+  let todos = [];
+  let currentFilter = 'all';
+  let nextId = 1;
+
+  // --- pomodoro state ---
+  // Unlike todo, pomodoro state is stored separately to avoid write amplification
+  const POM_STORAGE_KEY = 'todo_pomodoro_timer';
+  let timerMode = 'focus';    // 'focus' | 'break'
+  let timerRemaining = 25 * 60; // seconds
+  let timerTotal = 25 * 60;
+  let timerState = 'idle';    // 'idle' | 'running' | 'paused'
+  let timerInterval = null;
+  let sessionCount = 0;
+  let tickSoundEnabled = true;
+
+  const CIRCUMFERENCE = 565.48;
+
+  // ================================
+  //  Init Data
+  // ================================
+  function init() {
+    const saved = loadData();
+    if (saved && Array.isArray(saved.todos)) {
+      todos = saved.todos;
+      nextId = saved.nextId || todos.reduce((max, t) => Math.max(max, t.id), 0) + 1;
+      sessionCount = saved.sessionCount || 0;
+    }
+    renderTodos();
+    updateTodoStats();
+
+    // Restore pomodoro timer from storage
+    restoreTimer();
+    renderTimer();
+
+    document.getElementById('sessionCount').textContent = sessionCount;
+  }
+
+  // ================================
+  //  Todo Functions
+  // ================================
+  function persistTodos() {
+    const data = loadData() || {};
+    data.todos = todos;
+    data.nextId = nextId;
+    data.sessionCount = sessionCount;
+    saveData(data);
+  }
+
+  function addTodo(text) {
+    text = text.trim();
+    if (!text) return;
+    todos.unshift({ id: nextId++, text, completed: false, createdAt: Date.now() });
+    persistTodos();
+    renderTodos();
+    updateTodoStats();
+  }
+
+  function toggleTodo(id) {
+    const todo = todos.find(t => t.id === id);
+    if (todo) {
+      todo.completed = !todo.completed;
+      persistTodos();
+      renderTodos();
+      updateTodoStats();
+    }
+  }
+
+  function deleteTodo(id) {
+    todos = todos.filter(t => t.id !== id);
+    persistTodos();
+    renderTodos();
+    updateTodoStats();
+  }
+
+  function clearCompleted() {
+    todos = todos.filter(t => !t.completed);
+    persistTodos();
+    renderTodos();
+    updateTodoStats();
+  }
+
+  function getFilteredTodos() {
+    if (currentFilter === 'active') return todos.filter(t => !t.completed);
+    if (currentFilter === 'completed') return todos.filter(t => t.completed);
+    return todos;
+  }
+
+  function renderTodos() {
+    const list = document.getElementById('todoList');
+    const filtered = getFilteredTodos();
+    if (filtered.length === 0) {
+      list.innerHTML = '<li class="empty-msg">暂无待办事项</li>';
+      return;
+    }
+    list.innerHTML = filtered.map(todo => `
+      <li class="todo-item${todo.completed ? ' completed' : ''}" data-id="${todo.id}">
+        <div class="todo-check${todo.completed ? ' checked' : ''}" data-action="toggle"></div>
+        <span class="todo-text">${escapeHtml(todo.text)}</span>
+        <button class="todo-delete" data-action="delete" title="删除">✕</button>
+      </li>
+    `).join('');
+  }
+
+  function updateTodoStats() {
+    const total = todos.length;
+    const completed = todos.filter(t => t.completed).length;
+    const active = total - completed;
+    document.getElementById('todoStats').textContent =
+      total === 0 ? '暂无待办' : `待办 ${active} 项 · 已完成 ${completed} 项`;
+    document.getElementById('clearDone').style.display = completed > 0 ? 'inline' : 'none';
+  }
+
+  function setFilter(filter) {
+    currentFilter = filter;
+    document.querySelectorAll('.todo-filters button').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.filter === filter);
+    });
+    renderTodos();
+  }
+
+  function escapeHtml(str) {
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+  }
+
+  // ================================
+  //  Pomodoro Functions
+  // ================================
+  function persistTimer() {
+    try {
+      const state = {
+        mode: timerMode,
+        remaining: timerRemaining,
+        total: timerTotal,
+        state: timerState,
+        sessionCount: sessionCount
+      };
+      localStorage.setItem(POM_STORAGE_KEY, JSON.stringify(state));
+    } catch (_) {}
+  }
+
+  function restoreTimer() {
+    try {
+      const raw = localStorage.getItem(POM_STORAGE_KEY);
+      if (!raw) return;
+      const saved = JSON.parse(raw);
+      // Restore session count from here too
+      if (typeof saved.sessionCount === 'number') sessionCount = saved.sessionCount;
+
+      if (saved.state === 'running') {
+        // Timer was running — compute elapsed time
+        timerMode = saved.mode || 'focus';
+        timerTotal = saved.total || 25 * 60;
+        timerState = 'idle';
+        // If saved.remaining exists, use it (we saved it on page unload)
+        if (saved.remaining != null) {
+          timerRemaining = Math.max(0, saved.remaining);
+        } else {
+          timerRemaining = timerTotal;
+        }
+        timerMode = saved.mode || 'focus';
+      } else if (saved.state === 'paused') {
+        timerMode = saved.mode || 'focus';
+        timerRemaining = saved.remaining != null ? saved.remaining : (25 * 60);
+        timerTotal = saved.total || 25 * 60;
+        timerState = 'paused';
+        if (timerRemaining <= 0) timerState = 'idle';
+      } else {
+        timerMode = saved.mode || 'focus';
+        timerRemaining = saved.remaining != null ? saved.remaining : (25 * 60);
+        timerTotal = saved.total || 25 * 60;
+        timerState = 'idle';
+      }
+    } catch (_) {
+      timerMode = 'focus';
+      timerRemaining = 25 * 60;
+      timerTotal = 25 * 60;
+      timerState = 'idle';
+    }
+  }
+
+  function formatTime(sec) {
+    const m = Math.floor(sec / 60);
+    const s = sec % 60;
+    return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  }
+
+  function getProgress() {
+    if (timerTotal <= 0) return 0;
+    return Math.max(0, timerRemaining / timerTotal);
+  }
+
+  function updateRingProgress() {
+    const circle = document.getElementById('progressCircle');
+    const offset = CIRCUMFERENCE * (1 - getProgress());
+    circle.style.strokeDashoffset = offset;
+    circle.className = 'progress-circle';
+    if (timerState === 'running') circle.classList.add('running');
+    else if (timerState === 'paused') circle.classList.add('paused');
+    else if (timerRemaining <= 0) circle.classList.add('ended');
+  }
+
+  function renderTimer() {
+    document.getElementById('timerDisplay').textContent = formatTime(timerRemaining);
+    const label = document.getElementById('timerLabel');
+    label.textContent = timerMode === 'focus' ? '专注' : '休息';
+
+    const btn = document.getElementById('startBtn');
+    if (timerState === 'idle') {
+      if (timerRemaining <= 0) {
+        btn.textContent = '下一个';
+        btn.className = 'btn-start';
+      } else {
+        btn.textContent = '开始';
+        btn.className = 'btn-start';
+      }
+    } else if (timerState === 'running') {
+      btn.textContent = '暂停';
+      btn.className = 'btn-start';
+    } else {
+      btn.textContent = '继续';
+      btn.className = 'btn-start';
+    }
+    updateRingProgress();
+  }
+
+  function startTimer() {
+    if (timerRemaining <= 0) {
+      // Start next session
+      nextSession();
+      return;
+    }
+    timerState = 'running';
+    persistTimer();
+    renderTimer();
+    if (timerInterval) clearInterval(timerInterval);
+    timerInterval = setInterval(tick, 1000);
+  }
+
+  function pauseTimer() {
+    timerState = 'paused';
+    persistTimer();
+    renderTimer();
+    if (timerInterval) {
+      clearInterval(timerInterval);
+      timerInterval = null;
+    }
+  }
+
+  function resetTimer() {
+    timerState = 'idle';
+    if (timerInterval) {
+      clearInterval(timerInterval);
+      timerInterval = null;
+    }
+    timerMode = 'focus';
+    timerRemaining = 25 * 60;
+    timerTotal = 25 * 60;
+    persistTimer();
+    renderTimer();
+  }
+
+  function tick() {
+    if (timerRemaining > 0) {
+      timerRemaining--;
+      persistTimer();
+      renderTimer();
+    }
+    if (timerRemaining <= 0) {
+      // Time's up!
+      if (timerInterval) {
+        clearInterval(timerInterval);
+        timerInterval = null;
+      }
+      timerState = 'idle';
+      timerRemaining = 0;
+      renderTimer();
+      persistTimer();
+
+      if (timerMode === 'focus') {
+        sessionCount++;
+        const data = loadData() || {};
+        data.sessionCount = sessionCount;
+        saveData(data);
+        document.getElementById('sessionCount').textContent = sessionCount;
+        showToast('🎉 专注时间到！休息一下吧');
+      } else {
+        showToast('☕ 休息结束，开始新的专注！');
+      }
+    }
+  }
+
+  function nextSession() {
+    if (timerMode === 'focus') {
+      timerMode = 'break';
+      timerRemaining = 5 * 60;
+      timerTotal = 5 * 60;
+    } else {
+      timerMode = 'focus';
+      timerRemaining = 25 * 60;
+      timerTotal = 25 * 60;
+    }
+    timerState = 'idle';
+    if (timerInterval) {
+      clearInterval(timerInterval);
+      timerInterval = null;
+    }
+    persistTimer();
+    renderTimer();
+  }
+
+  function showToast(msg) {
+    const el = document.getElementById('toast');
+    el.textContent = msg;
+    el.classList.add('show');
+    setTimeout(() => el.classList.remove('show'), 3000);
+  }
+
+  // Save timer state on page unload so reloads preserve running state info
+  function onPageUnload() {
+    if (timerState === 'running') {
+      persistTimer();
+    }
+  }
+
+  // ================================
+  //  Event Listeners
+  // ================================
+
+  // Todo: add
+  document.getElementById('addBtn').addEventListener('click', () => {
+    const input = document.getElementById('todoInput');
+    addTodo(input.value);
+    input.value = '';
+    input.focus();
+  });
+  document.getElementById('todoInput').addEventListener('keydown', e => {
+    if (e.key === 'Enter') {
+      const input = document.getElementById('todoInput');
+      addTodo(input.value);
+      input.value = '';
+      input.focus();
+    }
+  });
+
+  // Todo: filter buttons
+  document.querySelectorAll('.todo-filters button').forEach(btn => {
+    btn.addEventListener('click', () => setFilter(btn.dataset.filter));
+  });
+
+  // Todo: list events (toggle / delete via delegation)
+  document.getElementById('todoList').addEventListener('click', e => {
+    const item = e.target.closest('.todo-item');
+    if (!item) return;
+    const id = Number(item.dataset.id);
+    const action = e.target.dataset.action;
+    if (action === 'toggle') toggleTodo(id);
+    else if (action === 'delete') deleteTodo(id);
+  });
+
+  // Todo: clear completed
+  document.getElementById('clearDone').addEventListener('click', clearCompleted);
+
+  // Timer: start / pause
+  document.getElementById('startBtn').addEventListener('click', () => {
+    if (timerState === 'running') {
+      pauseTimer();
+    } else {
+      startTimer();
+    }
+  });
+
+  // Timer: reset
+  document.getElementById('resetBtn').addEventListener('click', resetTimer);
+
+  // Keyboard shortcut: space to toggle timer
+  document.addEventListener('keydown', e => {
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+    if (e.key === ' ' && !e.repeat) {
+      e.preventDefault();
+      if (timerState === 'running') {
+        pauseTimer();
+      } else {
+        startTimer();
+      }
+    }
+  });
+
+  // Save on page unload
+  window.addEventListener('beforeunload', onPageUnload);
+
+  // ================================
+  //  Init
+  // ================================
+  init();
+})();
+</script>
+</body>
+</html>
